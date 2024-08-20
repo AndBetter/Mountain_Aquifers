@@ -17,7 +17,7 @@
 # 
 #
 # See "Morphological and hydrogeological controls of groundwater flows and water age distribution in mountain aquifers and streams"
-# by A.Betterle and A.Bellin for further details - doi: ***********
+# by A.Betterle and A.Bellin (Water Resources Reserch) for further details. 
 # =============================================================================
 
 
@@ -35,15 +35,15 @@ import multiprocessing
 from pathlib import Path
 
 ###################################################################
-#Set Files and Directories ########################################
+#Set input Files and Directories ##################################
 ###################################################################
 
-## Directories modflows exe
+## Directories modflow exe
 exeMODFLOW = Path("/**/**/MODFLOW-NWT_64.exe")
 exeMODPATH = Path("/**/**/mpath7.exe")
 
 
-#Raster paths 
+#Rasters paths 
 demPath = Path("/***/***/***.tif")          
 crPath =  Path("/***/***/***.tif")   
 
@@ -54,8 +54,9 @@ crPath =  Path("/***/***/***.tif")
 ########### Parameters for the simulations - all combinations are explored ##
 #############################################################################
 
-# note:  simulations assume an hydraulic conductivity K_G = 1e-7m/s ( assigned in terms of the ln-conductivity MEAN_Y= ln(K_G) = -16.12 )
-# note:  R values here refer to dimensional potential recharges (m/year) and correspond to adimensional recharge R/K of [0.001	0.002154435	0.004641589	0.01	0.021544347	0.046415888	0.1	0.215443469	0.464158883	1] 
+# note:  simulations assume an hydraulic conductivity at the ground surface  K_G = 1e-7m/s ( assigned in terms of the ln-conductivity MEAN_Y= ln(K_G) = -16.12 )
+# note:  R values here refer to dimensional potential recharges (m/year) and correspond to adimensional recharge R/K_G of [0.001	0.002154435	0.004641589	0.01	0.021544347	0.046415888	0.1	0.215443469	0.464158883	0.63419584	0.824454592	1
+] 
 
 # dimensional potential recharge r (m/year)
 R = [0.0031536,	0.006794225, 0.014637715, 0.031536,	0.067942252, 0.146377145, 0.31536, 0.679422524,	1.463771455, 2.0, 2.6, 3.1536] 
@@ -79,20 +80,20 @@ porosity=0.1
 # Number of layers used in the numerical discetization             
 layer_number=100                             
 
-# Maximum number of particles assigned for each cell during the particle tracking
+# Maximum number of particles assigned for each uppermost saturated cell during the particle tracking
 num_particle_per_cell_max=4  
 
 # Below this recharge the maximum number of particles for each cell is reduced to 2  to reduce the computational burden    
-R_particle_split=0.67942       
+R_particle_split=0.679       
  
 # Number of bins used to compute the histograms of the groundwater age
 number_bins_gw_age_hist=25          
 
 
 
-##############################################################################
-######### Main function
-##############################################################################
+##########################
+######### Main function ##
+##########################
 
 def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):     
     
@@ -116,7 +117,7 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         modelpath = path
         
         
-        # Inizializza il solutore
+        # Initialization of the solver
         mf1 = flopy.modflow.Modflow(modelname, exe_name= exeMODFLOW, version="mfnwt", model_ws=modelpath)
         nwt = flopy.modflow.ModflowNwt(mf1 , maxiterout=15000,  maxitinner=10000, mxiterxmd = 10000, headtol=0.001, fluxtol=R/50*3600*24, linmeth=1, stoptol=1e-10, hclosexmd =1e-3, dbdtheta = 0.5, backflag=1, msdr=25, thickfact=1e-04)
 
@@ -147,16 +148,16 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
           
     
         ###############################
-        #definition of flow packages 
+        #definition of flow packages ##
         ###############################
         
-        #creates a homogeneus 3-d arrya as big a the domain with the hydraulic conductivity of the ground
+        #creates a homogeneus 3-d arrya as big a the domain with the surface hydraulic conductivity
         hk = np.zeros((nlay,nrow,ncol),dtype=np.float64)
         hk= np.exp(np.sqrt(VAR_Y)* hk + MEAN_Y)  
         hk= hk*3600*24  # goes to m/day
         
         #########################################################################
-        # reduces the conductivity with depth. The array "reduction_factor_Ks" contain the scale factors applied to hk, which decreases exponentially from 1 to 0.001. The lower limit is necessary to avoid some instabilities
+        # reduces the conductivity with depth. The array "reduction_factor_Ks" contain the factors applied to hk, which decreases exponentially. The lower limit is necessary to avoid numeric instabilities
         #######################################################################
         reduction_factor_Ks = np.ones(hk.shape, dtype=np.float32)
         for idx1 in range(nrow):    
@@ -164,7 +165,8 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
           for idx3 in range(nlay):   
            if demData_stretched[idx1,idx2] >= botm[idx3+1,idx1,idx2] and demData_stretched[idx1,idx2]>0:    
             reduction_factor_Ks[idx3,idx1,idx2] = 0.001 + (1-0.001) * np.exp(- ALPHA * (demData_stretched[idx1,idx2] - ( botm[idx3,idx1,idx2] + botm[idx3+1,idx1,idx2] )/2  )  )
-        
+
+        # applies the reduction to the initial homogeneous hydraulic conductivity
         hk= np.multiply(hk,reduction_factor_Ks)
         
        ######################################################################################## 
@@ -180,7 +182,7 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         iboundData[crData > 0 ] = 1
         
         
-        #initial conditions for the first try of the solver  - different options
+        #initial conditions for the first try of the solver  - alternative options can be uncommented
         
         strt= demData_stretched * 0.5 +100
         #strt= zbot + IMP_DEPTH[iter_1] + (ztop - zbot - IMP_DEPTH[iter_1]) * R[iter_5]/365/86400 / np.mean(hk) 
@@ -202,8 +204,9 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         ######################################
         upw = flopy.modflow.ModflowUpw(mf1, laytyp = laytyp, hk = hk, ipakcb=53, hdry = -9999 , iphdry = 1) # <----!!!!! hdry = -1 , iphdry = 1)   #  <---- IMPORTANT! defines how the cells that dry because of the lowering water table are managed 
         
-        
+        ###################################################
         #Add the recharge package (RCH) to the MODFLOW model
+        ###################################################
         rch_array = np.zeros((nrow, ncol), dtype=np.float32)     
         rch_array[crData>0]=R/365      #m/day
         rch_data = {0: rch_array}
@@ -211,8 +214,10 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
 
         
 
-        
-        #Add the drain package (DRN) to the MODFLOW model
+        ###################################################
+        #Add the drain package (DRN) to the MODFLOW model 
+        #Drainage conditions (potential seepage faces) are assigned on the ground surface
+        ###################################################
         sorgenti = np.zeros(demData.shape, dtype=np.int32)
         sorgenti[crData >0 ] = 1
         lista = []
@@ -234,15 +239,13 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         
         
 
-        flopy.modflow.ModflowOc(mf1, stress_period_data={(0, 0): ['save head',
-                                                            'save budget',
-                                                            'print head']})
+        flopy.modflow.ModflowOc(mf1, stress_period_data={(0, 0): ['save head', 'save budget',  'print head']})
         
         
         
-        ########################################################################
-        ####### writes files and run simulation
-        #######################################################################
+        #########################################
+        ####### writes files and run simulation##
+        ##########################################
         
         #Write input files -> write file with extensions
         mf1.write_input()
@@ -251,9 +254,9 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         mf1.run_model()
     
     
-        ##########################################
-        #read output files
-        ###########################################
+        #####################
+        #read output files##
+        #####################
         
         fname = os.path.join(modelpath, modelname + ".hds")
         hds = bf.HeadFile(fname)
@@ -288,14 +291,14 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
     
         #######################################################################
         #######################################################################
-        #### particle tracking with modpath 7
+        #### particle tracking with modpath 7 #################################
         #######################################################################
         #######################################################################
         
 
-        ###################################################################################
-        # creates uniformely distributed particles-- tracking FORWARD
-        ###################################################################################
+        ########################################################################
+        # creates uniformely distributed particles -- tracking FORWARD #########
+        ########################################################################
                 
         plocs = []
         pids  = []
@@ -304,8 +307,8 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         localz= []
         particle_count=0
         
-        #assigns a number of particles proportional to the actual recharge 
-        for idx1 in range(nrow):    # particles are assigned at a level corresponding to the head 
+        #assigns a number of particles proportional to the actual recharge -  particles are assigned at an height corresponding to the hydraulic head   
+        for idx1 in range(nrow):     
          for idx2 in range(ncol):   
            if crData[idx1,idx2] >0 and drain_fluxes_minus_recharge_2D[idx1,idx2]>0:   
               
@@ -442,7 +445,7 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
 
            
         part0 = flopy.modpath.ParticleData(plocs, drape=1, structured=True, particleids=pids, localx=localx, localy=localy, localz=localz)  # drape=1: puts the particle in the first active layer below the one assigned in "plocs". drape=0 places the particle in the layer specificed by "plocs", if the layer is not active the particles are eliminated
-        pg0 = flopy.modpath.ParticleGroup(particlegroupname='PG1', particledata=part0,filename='ex01a.pg1.sloc')
+        pg0   = flopy.modpath.ParticleGroup(particlegroupname='PG1', particledata=part0,filename='ex01a.pg1.sloc')
       
         particlegroups = [pg0]
         
@@ -458,19 +461,21 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         
         mpbas = flopy.modpath.Modpath7Bas(mp, porosity=porosity,defaultiface=defaultiface)
         
-        mpsim = flopy.modpath.Modpath7Sim(mp, simulationtype='combined',
-                                          trackingdirection='forward',     
-                                          weaksinkoption='stop_at',
-                                          weaksourceoption='stop_at',
-                                          budgetoutputoption='summary',
-                                          budgetcellnumbers=None,
-                                          traceparticledata=None,
-                                          referencetime=[0, 0, 0.],
-                                          stoptimeoption='extend',
-                                          timepointdata=[500, 1000.],
-                                          zonedataoption='off', zones=None,
-                                          particlegroups=particlegroups)
-        
+        mpsim = flopy.modpath.Modpath7Sim(mp, simulationtype  ='combined',
+                                          trackingdirection   ='forward',     
+                                          weaksinkoption      ='stop_at',
+                                          weaksourceoption    ='stop_at',
+                                          budgetoutputoption  ='summary',
+                                          budgetcellnumbers   =None,
+                                          traceparticledata   =None,
+                                          referencetime       =[0, 0, 0.],
+                                          stoptimeoption      ='extend',
+                                          timepointdata       =[500, 1000.],
+                                          zonedataoption      ='off', 
+                                          zones               =None,
+                                          particlegroups      =particlegroups)
+
+
         # write modpath datasets
         mp.write_input()
         
@@ -478,9 +483,9 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         mp.run_model()
         
         
-        ###########################
-        # get pathline file (bulky file, to be commented if not necessary)
-        ###############################
+        #####################################################################
+        # get pathline file (bulky file, to be commented if not necessary)###
+        #####################################################################
         #import flopy.utils.modpathfile as mpf                             
         pthobj = flopy.utils.PathlineFile(modelname + '_mp'+'.mppth')
         p = pthobj.get_alldata()          # pathfile for all particles
@@ -502,10 +507,10 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
 
 
         for i in range(num_particles_GW):                                                         # iterates over all particles
-            coord_array=np.array([p[i].x[:-1], p[i].y[:-1], p[i].z[:-1], p[i].time[:-1]]).T       # creates an nx3 array with the vertexes of the flowpath trajectories
-            delta_length = np.sum(np.sqrt(np.diff(coord_array[:,0:3], axis=0)**2), axis=1)        # computes the length of each flowpath
+            coord_array         = np.array([p[i].x[:-1], p[i].y[:-1], p[i].z[:-1], p[i].time[:-1]]).T       # creates an nx3 array with the vertexes of the flowpath trajectories
+            delta_length        = np.sum(np.sqrt(np.diff(coord_array[:,0:3], axis=0)**2), axis=1)        # computes the length of each flowpath
             flowpath_lengths[i] = np.sum(delta_length)
-            delta_time=np.diff(coord_array[:,3], axis=0)
+            delta_time          = np.diff(coord_array[:,3], axis=0)
             flowpath_velocities.append(delta_length/delta_time)
             
 
@@ -516,9 +521,9 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
             gw_age_weights.append( (delta_length / flowpath_velocities[-1]) [np.isfinite(1/flowpath_velocities[-1])]  )
  
 
-        #########################################################
-        #calculates the statistics of GW age 
-        #########################################################
+        ############################################
+        #calculates the statistics of GW age #######
+        ############################################
           
         #creates a vector of all the ages of the particles      
         gw_age_array=np.array([])
@@ -545,14 +550,14 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         def weighted_kurtosis(var, wts):
             return (np.average((var - weighted_mean(var, wts))**4, weights=wts) / weighted_variance(var, wts)**(2))
             
-        gw_age_mean=weighted_mean(gw_age_array,gw_age_weights_array)
-        gw_age_var=weighted_variance(gw_age_array,gw_age_weights_array)
-        gw_age_skew=weighted_skew(gw_age_array,gw_age_weights_array)
-        gw_age_kurt=weighted_kurtosis(gw_age_array,gw_age_weights_array)
+        gw_age_mean   =  weighted_mean(gw_age_array,gw_age_weights_array)
+        gw_age_var    =  weighted_variance(gw_age_array,gw_age_weights_array)
+        gw_age_skew   =  weighted_skew(gw_age_array,gw_age_weights_array)
+        gw_age_kurt   =  weighted_kurtosis(gw_age_array,gw_age_weights_array)
             
         gw_age_moments= np.array([gw_age_mean, gw_age_var, gw_age_skew, gw_age_kurt])
         
-        #computes histogram characteristics
+        #computes histogram 
         hist_gw_age_natural=[]
         hist_gw_age_log=[]
 
@@ -566,8 +571,7 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
 
         
 
-        
-
+    
         
         # calculates the surface and subsurface fluxes in two different ways (either using the modpath particles or the modflow fluxes)
         Q_gw_particle= R * delr * delc / num_particle_per_cell_max_case  *  num_particles_GW  /365/24/3600  # m3/sec
@@ -583,7 +587,7 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
         Q_sw_fluxes_normalized=Q_sw_fluxes/Q_tot
         
         ###############################
-        # get travel times
+        # get travel times  ###########
         ###############################
         
         endobj = flopy.utils.EndpointFile(modelname + '_mp'+'.mpend')   # gets all the traveltimes
@@ -601,72 +605,71 @@ def MODELLO(crData, demData,IMP_DEPTH,TOPOGRAPHY_FACTOR,ALPHA,MEAN_Y,VAR_Y,R):
 
 
 
+############################################
+#####################################################
+# MAIN ##############################################
+#####################################################
+############################################
 
-##########################################################################
-#open and read raster files ##############################################
-##########################################################################
 
 
-#Open files
+#Open and read raster files 
 demDs =gdal.Open(demPath)
 crDs = gdal.Open(crPath)
 geot = crDs.GetGeoTransform() 
-
-geot
-
 
 # Get data as arrays
 demData_original = demDs.GetRasterBand(1).ReadAsArray()
 crData = crDs.GetRasterBand(1).ReadAsArray()
 
 demData=np.array(demData_original, copy=True)  
-demData[crData>0]=demData[crData>0]-np.min(demData[crData>0])  # shifts the DTM so that the outlet has elevation 0
 
+# shifts the DTM so that the outlet has elevation 0
+demData[crData>0]=demData[crData>0]-np.min(demData[crData>0])  
 
 # Get statistics
 stats = demDs.GetRasterBand(1).GetStatistics(0,1) 
 stats
 
 catchment_area= np.sum(crData>0) * geot[1] * abs(geot[5]) / 1000**2  # in km^2
-##########################################################################
 
 
 #########################################
-## allocates the space for the variables
+## allocates the memory for the variables
 ########################################
 
 run_count=0
 risultati=[]
 
-drain_fluxes_2D_ARRAY=np.zeros( (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA),) + demData.shape, dtype=np.float32)  # crea array vuoti che verranno riempiti durante i loop sui parametri 
-drain_fluxes_minus_recharge_2D_ARRAY=np.zeros( (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA),) + demData.shape, dtype=np.float32)# array dei flussi meno la ricarica - sarebbe la ricarica effettiva
-drain_fluxes_directrunoff_2D_ARRAY=np.zeros( (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA),) + demData.shape, dtype=np.float32)# array della componente di runoff (i.e. la componente della ricarica che non si infiltra)
+drain_fluxes_2D_ARRAY                = np.zeros( (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA),) + demData.shape, dtype=np.float32)                # fluxes from the seepage faces (drainages)
+drain_fluxes_minus_recharge_2D_ARRAY = np.zeros( (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA),) + demData.shape, dtype=np.float32) # effective recharge
+drain_fluxes_directrunoff_2D_ARRAY   = np.zeros( (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA),) + demData.shape, dtype=np.float32)   # quick runoff 
 
-R_K_ratio=np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-Q_gw_Q_sw_ratio_particle=np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-Q_gw_Q_sw_ratio_fluxes=np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-Q_tot=np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-Q_gw_fluxes_normalized=np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-Q_sw_fluxes_normalized=np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-GW_volume=np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-
-
-GW_age_moments=np.zeros( ((4),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-
-GW_age_hist_natural=[]
-GW_age_hist_log=[]
-
-max_particle_nubmer = num_particle_per_cell_max * sum(sum(crData>0))                    # assegna una particella per ognuna delle celle attive definite da crData - corrisponde al numero massimo (potrebbero essere meno perchè non vengono assegnate particelle se h > piano campagna, vedere sotto) - se si assegnano più particelle per cella bisogna cambiare
-traveltime_ARRAY=-9999*np.ones( ((max_particle_nubmer),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-streamflow_age_ARRAY=-9999*np.ones( ((max_particle_nubmer),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
-flowpath_lengths_ARRAY=-9999*np.ones( ((max_particle_nubmer),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)        
-
-layer_pc=np.zeros((crData.shape[0], crData.shape[1]),dtype=np.int32)  # layer in cui è contenuto il pc 
+R_K_ratio                = np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
+Q_gw_Q_sw_ratio_particle =np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
+Q_gw_Q_sw_ratio_fluxes   = np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
+Q_tot                    = np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
+Q_gw_fluxes_normalized   = np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
+Q_sw_fluxes_normalized   = np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
+GW_volume                = np.zeros( ((1),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
 
 
-########################################################################################
-## continues the main part of the code: runs the simulations and builds the outputs
-########################################################################################
+GW_age_moments = np.zeros( ((4),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
+
+GW_age_hist_natural =[]
+GW_age_hist_log     =[]
+
+max_particle_nubmer    = num_particle_per_cell_max * sum(sum(crData>0))                   
+traveltime_ARRAY       = -9999*np.ones( ((max_particle_nubmer),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
+streamflow_age_ARRAY   = -9999*np.ones( ((max_particle_nubmer),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)
+flowpath_lengths_ARRAY = -9999*np.ones( ((max_particle_nubmer),+ (len(R)*len(MEAN_Y)*len(IMP_DEPTH)*len(TOPOGRAPHY_FACTOR)*len(ALPHA))), dtype=np.float32)        
+
+layer_pc=np.zeros((crData.shape[0], crData.shape[1]),dtype=np.int32)  # layer where the ground suface lays
+
+
+##################################################################
+## MAIN continues: runs the simulations and builds the outputs ###
+##################################################################
 
 for iter_1 in range(len(IMP_DEPTH)):
     
@@ -676,9 +679,9 @@ for iter_1 in range(len(IMP_DEPTH)):
 
    for iter_4 in range(len(MEAN_Y)): 
   
-
+    # initializes parallel computations
     def main():
-      pool = multiprocessing.Pool(len(R))  # sets the number of cpu used, in this case is equal to the assigned recharge values
+      pool      = multiprocessing.Pool(len(R))  # sets the number of cores to be used in the parallel computations, in this case is equal to the assigned recharge values  - reduce the number if you have less cores 
       risultati = pool.starmap(MODELLO, [(crData, demData,IMP_DEPTH[iter_1],TOPOGRAPHY_FACTOR[iter_2],ALPHA[iter_3],MEAN_Y[iter_4],VAR_Y[iter_4],ricarica) for ricarica in R])
 
       pool.close()
@@ -687,9 +690,9 @@ for iter_1 in range(len(IMP_DEPTH)):
       return risultati
 
         
-
+    # better protect your main function when you use multiprocessing
     if __name__ == '__main__':
-     # Better protect your main function when you use multiprocessing
+     
     
     
      risultati = risultati + main()
@@ -699,17 +702,17 @@ for iter_1 in range(len(IMP_DEPTH)):
 #builds the arrays of the outputs starting from the lists in "risultati"
 
 for i in range(len(risultati)):
- traveltime_ARRAY[0:len(risultati[i][0]),i]=risultati[i][0]
- flowpath_lengths_ARRAY[0:len(risultati[i][1]),i]=risultati[i][1]
- drain_fluxes_2D_ARRAY[i,:,:]=risultati[i][2]
- drain_fluxes_minus_recharge_2D_ARRAY[i,:,:]=risultati[i][3]
- drain_fluxes_directrunoff_2D_ARRAY[i,:,:]=risultati[i][4]
- GW_volume[0,i]=risultati[i][5]
- Q_gw_Q_sw_ratio_particle[0,i]=risultati[i][6]
- Q_gw_Q_sw_ratio_fluxes[0,i]=risultati[i][7]   
- Q_tot[0,i]=risultati[i][8]  
- Q_gw_fluxes_normalized[0,i]=risultati[i][9]  
- Q_sw_fluxes_normalized[0,i]=risultati[i][10]  
+ traveltime_ARRAY[0:len(risultati[i][0]),i]        =risultati[i][0]
+ flowpath_lengths_ARRAY[0:len(risultati[i][1]),i]  =risultati[i][1]
+ drain_fluxes_2D_ARRAY[i,:,:]                      =risultati[i][2]
+ drain_fluxes_minus_recharge_2D_ARRAY[i,:,:]       =risultati[i][3]
+ drain_fluxes_directrunoff_2D_ARRAY[i,:,:]         =risultati[i][4]
+ GW_volume[0,i]                                    =risultati[i][5]
+ Q_gw_Q_sw_ratio_particle[0,i]                     =risultati[i][6]
+ Q_gw_Q_sw_ratio_fluxes[0,i]                       =risultati[i][7]   
+ Q_tot[0,i]                                        =risultati[i][8]  
+ Q_gw_fluxes_normalized[0,i]                       =risultati[i][9]  
+ Q_sw_fluxes_normalized[0,i]                       =risultati[i][10]  
  
  GW_age_moments[:,i,None]=risultati[i][11][:,None] 
 
@@ -726,62 +729,64 @@ for i in range(len(risultati)):
 
 
 
-############################################
-##### saves variables - uncomment if necessary
-############################################
+###########################################################
+##### uncomment if you want to save model output variables
+###########################################################
 
 # =============================================================================
 # import shelve
 # 
-# filename='E:/Post_TN/Risultati/shelve.out'
+# #where you want to save the results
+# filename='E:/.../.../shelve.out'
 # my_shelf = shelve.open(filename,'n') # 'n' for new
 # 
-# my_shelf['R'] = globals()['R']
-# my_shelf['IMP_DEPTH'] = globals()['IMP_DEPTH']
-# my_shelf['MEAN_Y'] = globals()['MEAN_Y']
-# my_shelf['VAR_Y'] = globals()['VAR_Y']
+# my_shelf['R']          = globals()['R']
+# my_shelf['IMP_DEPTH']  = globals()['IMP_DEPTH']
+# my_shelf['MEAN_Y']     = globals()['MEAN_Y']
+# my_shelf['VAR_Y']      = globals()['VAR_Y']
 # my_shelf['TOPOGRAPHY_FACTOR'] = globals()['TOPOGRAPHY_FACTOR']
-# my_shelf['ALPHA'] = globals()['ALPHA']
+# my_shelf['ALPHA']      = globals()['ALPHA']
 # 
-# my_shelf['demData_original'] = globals()['demData_original']
-# my_shelf['drain_fluxes_2D_ARRAY'] = globals()['drain_fluxes_2D_ARRAY']
-# my_shelf['drain_fluxes_directrunoff_2D_ARRAY'] = globals()['drain_fluxes_directrunoff_2D_ARRAY']
-# my_shelf['drain_fluxes_minus_recharge_2D_ARRAY'] = globals()['drain_fluxes_minus_recharge_2D_ARRAY']
-# my_shelf['traveltime_ARRAY'] = globals()['traveltime_ARRAY']
-# my_shelf['streamflow_age_ARRAY'] = globals()['streamflow_age_ARRAY']
-# my_shelf['flowpath_lengths_ARRAY'] = globals()['flowpath_lengths_ARRAY']
-# my_shelf['R'] = globals()['R']
-# my_shelf['ALPHA'] = globals()['ALPHA']
-# my_shelf['TOPOGRAPHY_FACTOR'] = globals()['TOPOGRAPHY_FACTOR']
-# my_shelf['IMP_DEPTH'] = globals()['IMP_DEPTH']
-# my_shelf['porosity'] = globals()['porosity']
-# my_shelf['GW_volume'] = globals()['GW_volume']
+# my_shelf['demData_original']                    = globals()['demData_original']
+# my_shelf['drain_fluxes_2D_ARRAY']               = globals()['drain_fluxes_2D_ARRAY']
+# my_shelf['drain_fluxes_directrunoff_2D_ARRAY']  = globals()['drain_fluxes_directrunoff_2D_ARRAY']
+# my_shelf['drain_fluxes_minus_recharge_2D_ARRAY']= globals()['drain_fluxes_minus_recharge_2D_ARRAY']
+# my_shelf['traveltime_ARRAY']                    = globals()['traveltime_ARRAY']
+# my_shelf['streamflow_age_ARRAY']                = globals()['streamflow_age_ARRAY']
+# my_shelf['flowpath_lengths_ARRAY']              = globals()['flowpath_lengths_ARRAY']
+# my_shelf['R']                                   = globals()['R']
+# my_shelf['ALPHA']                               = globals()['ALPHA']
+# my_shelf['TOPOGRAPHY_FACTOR']                   = globals()['TOPOGRAPHY_FACTOR']
+# my_shelf['IMP_DEPTH']                           = globals()['IMP_DEPTH']
+# my_shelf['porosity']                            = globals()['porosity']
+# my_shelf['GW_volume']                           = globals()['GW_volume']
 # 
-# my_shelf['catchment_area'] = globals()['catchment_area']
-# my_shelf['Q_tot'] = globals()['Q_tot']
-# my_shelf['Q_gw_fluxes_normalized'] = globals()['Q_gw_fluxes_normalized']
-# my_shelf['Q_sw_fluxes_normalized'] = globals()['Q_sw_fluxes_normalized']
-# my_shelf['Q_gw_Q_sw_ratio_fluxes'] = globals()['Q_gw_Q_sw_ratio_fluxes']
+# my_shelf['catchment_area']           = globals()['catchment_area']
+# my_shelf['Q_tot']                    = globals()['Q_tot']
+# my_shelf['Q_gw_fluxes_normalized']   = globals()['Q_gw_fluxes_normalized']
+# my_shelf['Q_sw_fluxes_normalized']   = globals()['Q_sw_fluxes_normalized']
+# my_shelf['Q_gw_Q_sw_ratio_fluxes']   = globals()['Q_gw_Q_sw_ratio_fluxes']
 # my_shelf['Q_gw_Q_sw_ratio_particle'] = globals()['Q_gw_Q_sw_ratio_particle']
-# my_shelf['GW_volume'] = globals()['GW_volume']
+# my_shelf['GW_volume']                = globals()['GW_volume']
 # 
-# my_shelf['GW_age_moments'] = globals()['GW_age_moments']
+# my_shelf['GW_age_moments']      = globals()['GW_age_moments']
 # my_shelf['GW_age_hist_natural'] = globals()['GW_age_hist_natural']
-# my_shelf['GW_age_hist_log'] = globals()['GW_age_hist_log']
+# my_shelf['GW_age_hist_log']     = globals()['GW_age_hist_log']
 # 
 # my_shelf.close()
 # =============================================================================
 
 
-############################################
-##### load variables
-############################################
+####################################################################
+##### uncomment if you want to load the saved model output variables
+####################################################################
 
-import shelve
-
-filename='C:/PostDoc/Acquiferi_trentini/Risultati/AAA_adimensionali_full_run/shelve.out'
-filename='E:/Post_TN/Risultati/shelve.out'
-my_shelf = shelve.open(filename)
-for key in my_shelf:
-    globals()[key]=my_shelf[key]
-my_shelf.close()
+# =============================================================================
+# import shelve
+#
+# filename='E:/.../.../shelve.out'
+# my_shelf = shelve.open(filename)
+# for key in my_shelf:
+#     globals()[key]=my_shelf[key]
+# my_shelf.close()
+# =============================================================================
