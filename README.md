@@ -5,7 +5,7 @@ geomorphoclimatic conditions. The simulations explore the role of subsurface wat
 of mountain catchments, specifically on:
 
 - groundwater storage
-- travel times and flowapath lengths
+- travel times and flowapath lengths ............................
 - upwelling and groundwater recharge fluxes
 - the partitioning of incoming recharge into quick runoff and slow groundwater flows
 - the extension of the grondwater-fed portion of the drainage network. 
