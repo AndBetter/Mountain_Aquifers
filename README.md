@@ -18,8 +18,3 @@ by A. Betterle and A. Bellin (doi: ----- )
 
 
 
-The repository contains:
-
-*****  : to perform single simulations
-*****  : to perform parallel simulations 
-*****  : to plot model results
