@@ -4,12 +4,12 @@ import numpy as np
 
 # the following values correspond to those used in the simulations
 
-R = [0.0031536,	0.006794225, 0.014637715, 0.031536,	0.067942252, 0.146377145, 0.31536, 0.679422524,	1.463771455, 2.0, 2.6, 3.1536]  # dimensional recharge r (m/year). Given Ks=1e-7  m/s it corresponds to dimensionless recharges from 10^-3 to 1. 
-IMP_DEPTH =[10, 100, 1000]           # formation depth D_i (m)       
-MEAN_Y = [-16.12]                    # ln(K_G). Log conductivity at the ground surface           
-VAR_Y = [0]                          # variance of the log conductivity      
-TOPOGRAPHY_FACTOR = [0.25, 1, 4]     # topographic stretch factor T_f (-)       
-ALPHA = [0.0001, 0.001, 0.01]        # exponential decay rate of the hydraulic conductivity with depth (m-1)
+R                 = [0.0031536,	0.006794225, 0.014637715, 0.031536,	0.067942252, 0.146377145, 0.31536, 0.679422524,	1.463771455, 2.0, 2.6, 3.1536]  # dimensional recharge r (m/year). Given Ks=1e-7  m/s it corresponds to dimensionless recharges from 10^-3 to 1. 
+IMP_DEPTH         = [10, 100, 1000]             # formation depth D_i (m)       
+MEAN_Y            = [-16.12]                    # ln(K_G). Log conductivity at the ground surface           
+VAR_Y             = [0]                         # variance of the log conductivity      
+TOPOGRAPHY_FACTOR = [0.25, 1, 4]                # topographic stretch factor T_f (-)       
+ALPHA             = [0.0001, 0.001, 0.01]       # exponential decay rate of the hydraulic conductivity with depth (m-1)
 
 Ks=1e-7          # K_g (m/s)
 n=0.1            #porosity (-)
@@ -21,7 +21,7 @@ R_K_ratio = np.array(R)/Ks /3600 / 24 /365
 
 #import model outputs from shelve.out
 import shelve
-filename='***/***/shelve.out'
+filename='.../.../shelve.out'
 my_shelf = shelve.open(filename)
 for key in my_shelf:
  globals()[key]=my_shelf[key]
@@ -32,7 +32,7 @@ my_shelf.close()
 representative_length =  (catchment_area*1000**2)**0.5   # (m)
 
 
-#%%################################
+###################################
 ###################################
 ## traveltime and flowpath lengths
 ###################################
