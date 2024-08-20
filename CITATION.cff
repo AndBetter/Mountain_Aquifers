@@ -1,0 +1,9 @@
+cff-version: 1.1.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: Andrea
+  given-names: Betterle
+orcid: https://doi.org/10.5281/zenodo.13350627
+title: Mountain_Aquifers_v1
+version: v1
+date-released: 2024-08-20
