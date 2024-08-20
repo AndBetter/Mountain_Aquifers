@@ -38,12 +38,13 @@ from pathlib import Path
 #Set input Files and Directories ##################################
 ###################################################################
 
-## Set the directories of the modflow exe
+
+## Set the directories to the modflow exe
 exeMODFLOW = Path("/**/**/MODFLOW-NWT_64.exe")
 exeMODPATH = Path("/**/**/mpath7.exe")
 
 
-#Set the paths to the input raster files
+## Set the paths to the input raster files (DEM and catchment mask)
 demPath = Path("/***/***/***.tif")          
 crPath =  Path("/***/***/***.tif")   
 
