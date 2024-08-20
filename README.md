@@ -1,4 +1,4 @@
-# Mountain_aquifers
+# Mountain_Aquifers
 
 This repository contains the python codes to simulate unconfined groundwater flows in complex topographies under a wide range of 
 geomorphoclimatic conditions. The simulations explore the role of subsurface water flows in the overall hydrological functioning 
