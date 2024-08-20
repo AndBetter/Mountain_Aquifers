@@ -10,7 +10,7 @@ of mountain catchments, specifically on:
 - the partitioning of incoming recharge into quick runoff and slow groundwater flows
 - the extension of the grondwater-fed portion of the drainage network. 
 
-As the code requires basic geographical information as input (e.g. a DEM), it can easily be extended to different morphological settings. 
+As the code requires basic geographical information as input (e.g. a DEM), and has a flexible parametrization, it can easily be extended to different morphological settings.
 
 Further details on: 
 
