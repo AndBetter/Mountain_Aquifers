@@ -12,7 +12,7 @@ model_name = "maso_transiente"
 
 
 # PARAMETERS
-ks               =  0.01   # m/day
+ks               =  1   # m/day
 porosity         =  0.1
 n_lay            =  100
 aq_tickness      =  200
@@ -34,7 +34,7 @@ base_dir = Path("E:/Trento/modello_transiente/simultions/maso_transiente")
 
 
 #if True use a DTM, otherwise use sample topography
-if True:
+if False:
     with rasterio.open(path_dtm) as src:
         nodata      = src.nodata
         transform   = src.transform
@@ -44,13 +44,13 @@ if True:
         catchment   = ~np.isnan(dtm)      
 else:
     #SIMPLIFIED TEST DTM
-    dim_i   = 50  ; dim_j   = 50
+    dim_i   = 51  ; dim_j   = 51
     slope_i = 0   ; slope_j = 0.05
     dtm= np.ones((dim_i,dim_j))
     i, j = np.mgrid[0:dtm.shape[0], 0:dtm.shape[1]]
     catchment = ~np.isnan(dtm)
     pxl_size = 100
-    dtm = dtm * i * slope_i*pxl_size + dtm * np.abs( (dim_j-1)/2 - j) * slope_j*pxl_size
+    dtm = dtm * i * slope_i*pxl_size + dtm * np.abs( (dim_j)/2 - (j+0.5) ) * slope_j*pxl_size
 
 
 
@@ -269,14 +269,14 @@ oc = fp.mf6.ModflowGwfoc(
     
 if True:
     #horizontal plot
-    pmv = fp.plot.PlotMapView(model=gwf, layer=30)
+    pmv = fp.plot.PlotMapView(model=gwf, layer=0)
     pmv.plot_bc('DRN', color='b')
     pmv.plot_grid(colors='silver', lw=0.5)
     
     
     #cross section
     plt.figure(figsize = (5,3) )
-    pxs = fp.plot.PlotCrossSection (model = gwf , line= { "Row" : 50 })
+    pxs = fp.plot.PlotCrossSection (model = gwf , line= { "Row" : 10 })
     pxs.plot_bc('DRN', color='b')
     #pxs.plot_bc('WEL')
     pxs.plot_grid(colors='silver', lw=0.1)
@@ -300,14 +300,14 @@ if not success:
 fname = base_dir/f'{model_name}.hds'
 hdobj = fp.utils.HeadFile(fname)
 head_3d     = hdobj.get_data(totim=hdobj.times[-1])   
-head_3d[head_3d==1.e+30] = np.nan
-head_3d[head_3d<=cell_bottoms_3d]= 0
+head_3d[head_3d==1.e+30]          = np.nan
+head_3d[head_3d<=cell_bottoms_3d] = -999
 
 
 
 # MIN-MAX heads
 head_max = np.nanmax(head_3d)
-head_min = np.nanmin(head_3d)
+head_min = np.nanmin(head_3d[head_3d>-999])
 print('head_max: ', head_max)   
 print('head_min: ', head_min)   
 
@@ -319,12 +319,20 @@ contour_interval = 10
 levels = np.arange(head_min, head_max, contour_interval)
 
 
+#CUSTOM COLORMAP
+base_cmap      = plt.cm.viridis # Create a new colormap with a base of gray
+base_colors    = base_cmap(np.arange(base_cmap.N))
+specific_color = np.array([0.8, 0.8, 0.8, 1.0]) 
+base_colors[0] = specific_color  
+custom_cmap    = mcolors.ListedColormap(base_colors)
+
+
 
 #PLOT CROSS SECTION - ROW direction
-row_cross= 50
+row_cross= 30
 plt.figure(figsize = (5,3) )
 pxs = fp.plot.PlotCrossSection (model = gwf , line= { "Row" : row_cross } ) 
-plot = pxs.plot_array(head_3d,vmin=head_min, vmax=head_max)
+plot = pxs.plot_array(head_3d,vmin=0-1, vmax=head_max,cmap=custom_cmap)
 pxs.plot_grid(colors='silver', lw=0.1)
 pxs.contour_array( head_3d, levels=levels,  linewidths = .5, colors = 'b')
 plt.title(rf'Heads in Row cross-section {row_cross} - $\Delta_{{contour}}$ = {contour_interval} m')
@@ -334,10 +342,10 @@ plt.show()
 
 
 #PLOT CROSS SECTION - ROW direction
-col_cross= 50
+col_cross= 40
 plt.figure(figsize = (5,3) )
 pxs = fp.plot.PlotCrossSection (model = gwf , line= { "Column" : col_cross } ) 
-plot = pxs.plot_array(head_3d,vmin=head_min, vmax=head_max)
+plot = pxs.plot_array(head_3d,vmin=0-1, vmax=head_max,cmap=custom_cmap)
 pxs.plot_grid(colors='silver', lw=0.1)
 pxs.contour_array( head_3d, levels=levels,  linewidths = .5, colors = 'b')
 plt.title(rf'Heads in Column cross-section {row_cross} - $\Delta_{{contour}}$ = {contour_interval} m')
@@ -415,12 +423,6 @@ Q_rch_max= np.nanmax(Q_rch_2d_NET)
 
 
 ### PLOT NET SEEPAGE  - [L]^3/[T]
-base_cmap      = plt.cm.viridis # Create a new colormap with a base of gray
-base_colors    = base_cmap(np.arange(base_cmap.N))
-specific_color = np.array([0.8, 0.8, 0.8, 1.0]) 
-base_colors[0] = specific_color  
-custom_cmap    = mcolors.ListedColormap(base_colors)
-
 pmv = fp.plot.PlotMapView(model=gwf)
 qm  = pmv.plot_array(Q_drn_2d_NET,vmin=0, vmax=Q_drn_max, cmap=custom_cmap)
 plt.colorbar(qm, shrink = 1, label ='Seepage $[L]^3/[T]$')
@@ -463,3 +465,9 @@ plt.colorbar(qm, shrink = 1, label ='Recharge $[L]^3/[T]$')
 plt.title('Recharge discharge $[L]^3/[T]$')
 plt.show()
 
+
+
+#FLOW RATI
+Q_bf    = np.nansum(Q_drn_2d_NET)  # equals np.nansum(Q_rch_2d_NET)
+Q_dr    = np.nansum(Q_rch_2d) - Q_bf
+Q_ratio = Q_bf/(Q_bf + Q_dr)
