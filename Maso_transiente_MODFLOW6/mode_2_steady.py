@@ -43,13 +43,13 @@ if False:
         catchment   = ~np.isnan(dtm)      
 else:
     #SIMPLIFIED TEST DTM
-    dim_i   = 50  ; dim_j   = 50
+    dim_i   = 51  ; dim_j   = 51
     slope_i = 0   ; slope_j = 0.05
     dtm= np.ones((dim_i,dim_j))
     i, j = np.mgrid[0:dtm.shape[0], 0:dtm.shape[1]]
     catchment = ~np.isnan(dtm)
     pxl_size = 100
-    dtm = dtm * i * slope_i*pxl_size + dtm * np.abs( (dim_j-1)/2 - j) * slope_j*pxl_size
+    dtm = dtm * i * slope_i*pxl_size + dtm * np.abs( (dim_j)/2 - (j+0.5) ) * slope_j*pxl_size
 
 
 
@@ -78,7 +78,7 @@ dtm[np.isnan(dtm)]=0
 
 
 # option 1 - constant tickness of the acquifer  - option 2 - bottom elevation
-if False:
+if True:
     dz  = aq_tickness  / (n_lay - 1) 
     cell_bottoms_3d = np.linspace(dtm ,  dtm  - aq_tickness, n_lay   )
     aspect_ratio = dz/pxl_size
@@ -349,7 +349,7 @@ plt.show()
 
 
 #PLOT HORIZONTAL CROSS-SECTION
-layer_cross = 10
+layer_cross = 99
 pmv = fp.plot.PlotMapView(model=gwf,  layer=layer_cross)
 qm  = pmv.plot_array(head_3d,vmin=head_min, vmax=head_max)
 plt.colorbar(qm, shrink = 1, label ='head (m)')
